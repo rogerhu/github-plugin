@@ -27,6 +27,9 @@
             </f:block>
           </f:section>
         </table>
+        <f:entry field="eventTypes" title="Event Types">
+          <f:enumSet/>
+        </f:entry>
       </f:nested>
     </f:radioBlock>
     <f:radioBlock name="hookMode" value="none" title="${%Manually manage hook URLs}" checked="${!instance.isManageHook()}"

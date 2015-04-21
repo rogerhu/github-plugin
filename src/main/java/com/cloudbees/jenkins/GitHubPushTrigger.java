@@ -1,19 +1,16 @@
 package com.cloudbees.jenkins;
 
-import hudson.Extension;
-import hudson.Util;
-import hudson.console.AnnotatedLargeText;
-import hudson.model.Action;
-import hudson.model.Hudson;
-import hudson.model.Hudson.MasterComputer;
-import hudson.model.Item;
-import hudson.model.AbstractProject;
-import hudson.model.Project;
-import hudson.triggers.Trigger;
-import hudson.triggers.TriggerDescriptor;
-import hudson.util.FormValidation;
-import hudson.util.SequentialExecutionQueue;
-import hudson.util.StreamTaskListener;
+import net.sf.json.JSONObject;
+
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.jelly.XMLOutput;
+import org.jenkinsci.main.modules.instance_identity.InstanceIdentity;
+import org.kohsuke.github.GHEvent;
+import org.kohsuke.github.GHException;
+import org.kohsuke.github.GHRepository;
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.StaplerRequest;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,24 +25,29 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import jenkins.model.Jenkins;
-import net.sf.json.JSONObject;
-
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.jelly.XMLOutput;
-import org.jenkinsci.main.modules.instance_identity.InstanceIdentity;
-import org.kohsuke.github.GHException;
-import org.kohsuke.github.GHRepository;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.StaplerRequest;
-
 import javax.inject.Inject;
+
+import hudson.Extension;
+import hudson.Util;
+import hudson.console.AnnotatedLargeText;
+import hudson.model.AbstractProject;
+import hudson.model.Action;
+import hudson.model.Hudson;
+import hudson.model.Hudson.MasterComputer;
+import hudson.model.Item;
+import hudson.model.Project;
+import hudson.triggers.Trigger;
+import hudson.triggers.TriggerDescriptor;
+import hudson.util.FormValidation;
+import hudson.util.SequentialExecutionQueue;
+import hudson.util.StreamTaskListener;
+import jenkins.model.Jenkins;
 
 /**
  * Triggers a build when we receive a GitHub post-commit webhook.
@@ -78,45 +80,49 @@ public class GitHubPushTrigger extends Trigger<AbstractProject<?,?>> implements 
                     try {
                         PrintStream logger = listener.getLogger();
                         long start = System.currentTimeMillis();
-                        logger.println("Started on "+ DateFormat.getDateTimeInstance().format(new Date()));
+                        logger.println("Started on " + DateFormat.getDateTimeInstance()
+                                .format(new Date()));
                         boolean result = job.poll(listener).hasChanges();
-                        logger.println("Done. Took "+ Util.getTimeSpanString(System.currentTimeMillis()-start));
-                        if(result)
+                        logger.println("Done. Took " + Util
+                                .getTimeSpanString(System.currentTimeMillis() - start));
+                        if (result)
                             logger.println("Changes found");
                         else
                             logger.println("No changes");
                         return result;
                     } catch (Error e) {
                         e.printStackTrace(listener.error("Failed to record SCM polling"));
-                        LOGGER.log(Level.SEVERE,"Failed to record SCM polling",e);
+                        LOGGER.log(Level.SEVERE, "Failed to record SCM polling", e);
                         throw e;
                     } catch (RuntimeException e) {
                         e.printStackTrace(listener.error("Failed to record SCM polling"));
-                        LOGGER.log(Level.SEVERE,"Failed to record SCM polling",e);
+                        LOGGER.log(Level.SEVERE, "Failed to record SCM polling", e);
                         throw e;
                     } finally {
                         listener.close();
                     }
                 } catch (IOException e) {
-                    LOGGER.log(Level.SEVERE,"Failed to record SCM polling",e);
+                    LOGGER.log(Level.SEVERE, "Failed to record SCM polling", e);
                 }
                 return false;
             }
 
             public void run() {
                 if (runPolling()) {
-                    String name = " #"+job.getNextBuildNumber();
+                    String name = " #" + job.getNextBuildNumber();
                     GitHubPushCause cause;
                     try {
                         cause = new GitHubPushCause(getLogFile(), pushBy);
                     } catch (IOException e) {
-                        LOGGER.log(Level.WARNING, "Failed to parse the polling log",e);
+                        LOGGER.log(Level.WARNING, "Failed to parse the polling log", e);
                         cause = new GitHubPushCause(pushBy);
                     }
                     if (job.scheduleBuild(cause)) {
-                        LOGGER.info("SCM changes detected in "+ job.getName()+". Triggering "+name);
+                        LOGGER.info("SCM changes detected in " + job.getName() + ". Triggering "
+                                + name);
                     } else {
-                        LOGGER.info("SCM changes detected in "+ job.getName()+". Job is already in the queue");
+                        LOGGER.info("SCM changes detected in " + job.getName()
+                                + ". Job is already in the queue");
                     }
                 }
             }
@@ -162,11 +168,12 @@ public class GitHubPushTrigger extends Trigger<AbstractProject<?,?>> implements 
                 for (GitHubRepositoryName name : names) {
                     for (GHRepository repo : name.resolve()) {
                         try {
-                            if(createJenkinsHook(repo, getDescriptor().getHookUrl())) {
+                            if (createJenkinsHook(repo, getDescriptor().getHookUrl())) {
                                 break;
                             }
                         } catch (Throwable e) {
-                            LOGGER.log(Level.WARNING, "Failed to add GitHub webhook for "+name, e);
+                            LOGGER.log(Level.WARNING, "Failed to add GitHub webhook for " + name,
+                                    e);
                         }
                     }
                 }
@@ -247,6 +254,10 @@ public class GitHubPushTrigger extends Trigger<AbstractProject<?,?>> implements 
 
         @Inject
         private transient InstanceIdentity identity;
+
+        public EnumSet<GHEvent> getEventTypes() {
+            return EnumSet.allOf(GHEvent.class);
+        }
 
         public DescriptorImpl() {
             load();
@@ -369,6 +380,7 @@ public class GitHubPushTrigger extends Trigger<AbstractProject<?,?>> implements 
         public static boolean allowsHookUrlOverride() {
             return ALLOW_HOOKURL_OVERRIDE;
         }
+
     }
 
     /**
